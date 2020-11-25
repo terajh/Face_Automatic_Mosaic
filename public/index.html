@@ -21,6 +21,7 @@
 <body>
   <noscript>You need to enable JavaScript to run this app.</noscript>
   <div id="root"></div>
+  
 </body>
 <script>
   var TILE_HEIGHT = 10;
@@ -64,16 +65,20 @@
         img.onload = function () {
           main_image = img;
           ratio = 730 / img.height;
+          console.log(img.height, ratio);
           canvas.width = img.width * (ratio);
           canvas.height = img.height * (ratio);
-          ctx.drawImage(img, 0, 0);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
           var formData = new FormData();
 
           formData.append('uploadFile', file[0]);
           formData.append('name', 'test');
-
+          // This is your API token
+          $('body').toggleClass('loading')
           $.ajax({
+
+
             url: 'http://127.0.0.1:3001/api',
             data: formData,
             processData: false,
@@ -86,11 +91,19 @@
               'Access-Control-Allow-Headers': 'application/json',
             },
             success: function (data) {
-              console.log('hi');
-              // var pos_x = data.x;
-              // var pos_y = data.y;
-              var pos_x = _pos_x = [140, 250];
-              var pos_y = _pos_y = [250, 340];
+              console.log(data);
+              $('body').toggleClass('loading')
+              var pos_x = [];
+              var pos_y = [];
+              for(var i = 0; i<data['len'] ; i++){
+                pos_x.push(data['list'][i]['left']);
+                pos_x.push(data['list'][i]['right']);
+                pos_y.push(data['list'][i]['top']);
+                pos_y.push(data['list'][i]['bottom']);
+              }
+              console.log(pos_x, pos_y);
+              _pos_x = pos_x;
+              _pos_y = pos_y;
 
               var container = $('#select_mozaic_human');
               for (var i = 0; i < pos_x.length; i += 2) {
@@ -122,17 +135,17 @@
 
                 face_canvas.addEventListener('click', (e) => {
                   var img = new Image(); // 이미지 객체를 생성하고
+                  console.log('click');
                   if ($('#radio' + e.target.id.split('canvas')[1]).attr('check') === 'true') {
                     $('#' + e.target.id).toggleClass('face_canvas_select');
-
                     $('#radio' + e.target.id.split('canvas')[1]).prop('checked', false);
                     $('#radio' + e.target.id.split('canvas')[1]).attr('check', false);
-                    let _cv = document.querySelector('#'+e.target.id);
+                    let _cv = document.querySelector('#' + e.target.id);
                     let _ct = _cv.getContext('2d');
-                    var tx = _cv.getAttribute('x');
-                    var ty = _cv.getAttribute('y');
-                    var tdx = _cv.getAttribute('dx');
-                    var tdy = _cv.getAttribute('dy');
+                    var tx = _cv.getAttribute('x') * ratio;
+                    var ty = _cv.getAttribute('y') * ratio;
+                    var tdx = _cv.getAttribute('dx') * ratio;
+                    var tdy = _cv.getAttribute('dy') * ratio;
                     ctx.drawImage(_ct.canvas, 0, 0, _ct.canvas.width, _ct.canvas.height, tx, ty, tdx, tdy);
                     return;
                   }
@@ -156,44 +169,34 @@
                     var tdx = temp_canvas.getAttribute('dx');
                     var tdy = temp_canvas.getAttribute('dy');
 
-                    photomosaic(e.path[0], tx, ty, tdx, tdy);
+                    photomosaic(e.path[0], tx*ratio, ty*ratio, tdx*ratio, tdy*ratio);
                   };
                   img.src = prev_image;
                 })
               }
 
-              $('.check_face').click((e) => {
-                if ($('#' + e.target.id).attr('check') === "true") {
-                  $('#' + e.target.id).prop('checked', false);
-                  $('#' + e.target.id).attr('check', false);
-                  $('#canvas' + e.target.id.split('radio')[1]).toggleClass('face_canvas_select');
+              // $('.check_face').click((e) => {
+              //   if ($('#' + e.target.id).attr('check') === "true") {
+              //     console.log('click');
+              //     $('#' + e.target.id).prop('checked', false);
+              //     $('#' + e.target.id).attr('check', false);
+              //     $('#canvas' + e.target.id.split('radio')[1]).toggleClass('face_canvas_select');
 
-                  let _cv = document.querySelector('#canvas' + e.target.id.split('radio')[1]);
-                  let _ct = _cv.getContext('2d');
-                  var tx = _cv.getAttribute('x');
-                  var ty = _cv.getAttribute('y');
-                  var tdx = _cv.getAttribute('dx');
-                  var tdy = _cv.getAttribute('dy');
-                  ctx.drawImage(_ct.canvas, 0, 0, _ct.canvas.width, _ct.canvas.height, tx, ty, tdx, tdy);
-
-                }
-                else {
-                  $('#' + e.target.id).prop('checked', true);
-                  $('#' + e.target.id).attr('check', true);
-                  $('#canvas' + e.target.id.split('radio')[1]).toggleClass('face_canvas_select');
-                }
-              });
-              $('.check_all').click(() => {
-                if ($('.check_all').attr('check') === "true") {
-                  $('.check_all').prop('checked', false);
-                  $('.check_face').prop('checked', false);
-                  $('.check_all').attr('check', false);
-                } else {
-                  $('check_all').prop('checked', true);
-                  $('.check_face').prop('checked', true);
-                  $('.check_all').attr('check', true);
-                }
-              });
+              //     let _cv = document.querySelector('#canvas' + e.target.id.split('radio')[1]);
+              //     let _ct = _cv.getContext('2d');
+              //     var tx = _cv.getAttribute('x');
+              //     var ty = _cv.getAttribute('y');
+              //     var tdx = _cv.getAttribute('dx');
+              //     var tdy = _cv.getAttribute('dy');
+              //     console.log('draw face');
+              //     ctx.drawImage(_ct.canvas, 0, 0, _ct.canvas.width, _ct.canvas.height, tx*ratio, ty*ratio, tdx*ratio, tdy*ratio);
+              //   }
+              //   else {
+              //     $('#' + e.target.id).prop('checked', true);
+              //     $('#' + e.target.id).attr('check', true);
+              //     $('#canvas' + e.target.id.split('radio')[1]).toggleClass('face_canvas_select');
+              //   }
+              // });
             }
           });
         };
@@ -230,27 +233,17 @@
     TILE_HEIGHT = slider_value[slider.value - 1];
     TILE_WIDTH = slider_value[slider.value - 1];
     img.onload = function () { // 이미지가 로드된 후에
-      // var prev_canvas = document.querySelector('#previewCanvas');
-      // var prev_ctx = prev_canvas.getContext('2d');
+
       var temp_canvas = document.querySelector('#' + current_image_id);
-      // console.log(temp_canvas, '#'+current_image_id)
       var tx = temp_canvas.getAttribute('x');
       var ty = temp_canvas.getAttribute('y');
       var tdx = temp_canvas.getAttribute('dx');
       var tdy = temp_canvas.getAttribute('dy');
 
-      photomosaic(img, tx, ty, tdx, tdy);
-      // prev_ctx.drawImage(prev_image, 0, 0); // 복사할 캔버스의 컨텍스트를 가져와 drawImage를 호출해 다시 그려준다.
+      photomosaic(img, tx*ratio, ty*ratio, tdx*ratio, tdy*ratio);
     };
     img.src = prev_image;
   };
-
-  // output.innerHTML = slider.value; // Display the default slider value
-
-  // Update the current slider value (each time you drag the slider handle)
-  // slider.oninput = function () {
-  //   output.innerHTML = this.value;
-  // }
 
 
   function photomosaic(image, posx = -1, posy = -1, posdx = -1, posdy = -1) {
@@ -270,15 +263,6 @@
     // Number of mosaic tiles
     var numTileCols = canvas.width / tileWidth;
     var numTileRows = canvas.height / tileHeight;
-
-
-    //canvas copy of image
-    // var imageCanvas = document.createElement('canvas');
-    // var imageCanvasContext = canvas.getContext('2d');
-    // imageCanvas.height = image.height;
-    // imageCanvas.width = image.width;
-    // imageCanvasContext.drawImage(image, 0, 0);
-
 
     //function for finding the average color
     function averageColor(row, column) {

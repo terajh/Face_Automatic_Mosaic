@@ -13,6 +13,7 @@ const Section = () => {
 
                 <Content />
                 <Detail></Detail>
+                <div className="modal"></div>
             </Row>
         </div>
     )
