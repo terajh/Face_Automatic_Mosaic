@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="stylesheet" href="./style/dropzone.css" />
+  <link rel="stylesheet" href="./style/slider.css" />
+
+  <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.js"></script>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+  <script type="text/javascript" src="./javascript/dropzone.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.0.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
+
+  <title>Humozaic</title>
+</head>
+
+<body>
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <div id="root"></div>
+
+</body>
+<script>
+  var TILE_HEIGHT = 10;
+  var TILE_WIDTH = 10;
+  var current_image_id = null;
+  var slider_value = [1, 2, 3, 5, 6, 9, 10, 15, 18, 27];
+  var _pos_x;
+  var _pos_y;
+  var ratio;
+
+
+  $(window).load(() => {
+    const canvas = document.querySelector('#jsCanvas');
+    const ctx = canvas.getContext('2d');
+    const browseBtn = document.querySelector('.browse-btn');
+    const realInput = document.querySelector('#real-input');
+    var main_image;
+    var t = document.querySelector('#down_images');
+
+    t.addEventListener('click', () => {
+      var cnvs = document.querySelector('#jsCanvas');
+      var dataURL = cnvs.toDataURL('image/png');
+
+      dataURL = dataURL.replace(/^data:image\/[^;]*/, 'data:application/octet-stream');
+      dataURL = dataURL.replace(/^data:application\/octet-stream/, 'data:application/octet-stream;headers=Content-Disposition%3A%20attachment%3B%20filename=Canvas.png');
+
+      var aTag = document.createElement('a');
+      aTag.download = 'mozaic.png';
+      aTag.href = dataURL;
+      aTag.click();
+    })
+
+    async function readInputFile(e) {
+      var file = e.target.files;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = async function () {
+          main_image = img;
+          console.log(img.width, img.height);
+          ratio = 1050 / img.width;
+          canvas.width = img.width * ratio;
+          canvas.height = img.height * ratio;
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          var formData = new FormData();
+          $('body').toggleClass('loading')
+          const model = await blazeface.load();
+
+          // Pass in an image or video to the model. The model returns an array of
+          // bounding boxes, probabilities, and landmarks, one for each detected face.
+
+          const returnTensors = false; // Pass in `true` to get tensors back, rather than values.
+          const predictions = await model.estimateFaces(img, returnTensors);
+          var pos_x = [];
+          var pos_y = [];
+          if (predictions.length > 0) {
+            console.log(predictions);
+            
+            for (let i = 0; i < predictions.length; i++) {
+
+              pos_x.push(predictions[i].topLeft[0]);
+              pos_y.push(predictions[i].topLeft[1]);
+
+              pos_x.push(predictions[i].bottomRight[0]);
+              pos_y.push(predictions[i].bottomRight[1]);
+
+            }
+          }
+          $('body').toggleClass('loading')
+          
+          console.log(pos_x, pos_y);
+          _pos_x = pos_x;
+          _pos_y = pos_y;
+
+          var container = $('#select_mozaic_human');
+          for (var i = 0; i < pos_x.length; i += 2) {
+            var face_div = document.createElement('div');
+            face_div.className = "face_div";
+
+            var check_face = document.createElement('input');
+            check_face.className = "check_face display_none";
+            check_face.id = "radio" + i.toString();
+            check_face.type = "radio";
+
+            var face_canvas = document.createElement('canvas');
+            face_canvas.className = "face_canvas";
+            face_canvas.id = "canvas" + i.toString();
+            face_canvas.setAttribute('x', pos_x[i]);
+            face_canvas.setAttribute('y', pos_y[i]);
+            face_canvas.setAttribute('dx', pos_x[i + 1] - pos_x[i]);
+            face_canvas.setAttribute('dy', pos_y[i + 1] - pos_y[i]);
+
+            var _ctx = face_canvas.getContext('2d');
+            _ctx.drawImage(img, pos_x[i], pos_y[i], pos_x[i + 1] - pos_x[i], pos_y[i + 1] - pos_y[i], 0, 0, face_canvas.width, face_canvas.height);
+
+            face_div.append(check_face);
+            face_div.append(face_canvas);
+
+            container.append(face_div);
+
+            face_canvas.addEventListener('click', (e) => {
+              var img = new Image(); // 이미지 객체를 생성하고
+              console.log('click');
+              if ($('#radio' + e.target.id.split('canvas')[1]).attr('check') === 'true') {
+                $('#' + e.target.id).toggleClass('face_canvas_select');
+                $('#radio' + e.target.id.split('canvas')[1]).prop('checked', false);
+                $('#radio' + e.target.id.split('canvas')[1]).attr('check', false);
+                let _cv = document.querySelector('#' + e.target.id);
+                let _ct = _cv.getContext('2d');
+                var tx = _cv.getAttribute('x') * ratio;
+                var ty = _cv.getAttribute('y') * ratio;
+                var tdx = _cv.getAttribute('dx') * ratio;
+                var tdy = _cv.getAttribute('dy') * ratio;
+                ctx.drawImage(_ct.canvas, 0, 0, _ct.canvas.width, _ct.canvas.height, tx, ty, tdx, tdy);
+                return;
+              }
+              $('#' + e.target.id).toggleClass('face_canvas_select');
+              $('#radio' + e.target.id.split('canvas')[1]).prop('checked', true);
+              $('#radio' + e.target.id.split('canvas')[1]).attr('check', true);
+
+              var prev_image = document.querySelector('#' + e.target.id).toDataURL("image/ipeg");
+              current_image_id = e.target.id;
+
+              var _ctx = document.querySelector('#' + e.target.id).getContext('2d');
+              var prev_canvas = document.querySelector('#previewCanvas');
+              var prev_ctx = prev_canvas.getContext('2d');
+
+              prev_ctx.drawImage(_ctx.canvas, 0, 0, prev_canvas.width, prev_canvas.height); // 복사할 캔버스의 컨텍스트를 가져와 drawImage를 호출해 다시 그려준다.
+              img.onload = function (e) { // 이미지가 로드된 후에
+                var temp_canvas = document.querySelector('#' + current_image_id);
+                // console.log(temp_canvas, '#'+current_image_id)
+                var tx = temp_canvas.getAttribute('x');
+                var ty = temp_canvas.getAttribute('y');
+                var tdx = temp_canvas.getAttribute('dx');
+                var tdy = temp_canvas.getAttribute('dy');
+
+                photomosaic(e.path[0], tx * ratio, ty * ratio, tdx * ratio, tdy * ratio);
+              };
+              img.src = prev_image;
+            })
+          }
+        }
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file[0]);
+    };
+    realInput.addEventListener('change', readInputFile);
+  })
+  
+
+  var slider = document.getElementById("myRange");
+  var output = document.getElementById("demo");
+  $('#myRange').attr('value', '50');
+  slider.max = 10;
+  slider.value = 5;
+
+  var slider = document.getElementById("myRange");
+
+  slider.oninput = function () {
+    var img = new Image(); // 이미지 객체를 생성하고
+    var prev_image = document.querySelector('#' + current_image_id).toDataURL("image/ipeg");
+    var _ctx = document.querySelector('#' + current_image_id).getContext('2d');
+    var prev_canvas = document.querySelector('#previewCanvas');
+    var prev_ctx = prev_canvas.getContext('2d');
+
+    prev_ctx.clearRect(0, 0, prev_canvas.width, prev_canvas.height);
+    prev_ctx.drawImage(_ctx.canvas, 0, 0, prev_canvas.width, prev_canvas.height); // 복사할 캔버스의 컨텍스트를 가져와 drawImage를 호출해 다시 그려준다.
+
+    TILE_HEIGHT = slider_value[slider.value - 1];
+    TILE_WIDTH = slider_value[slider.value - 1];
+    img.onload = function () { // 이미지가 로드된 후에
+
+      var temp_canvas = document.querySelector('#' + current_image_id);
+      var tx = temp_canvas.getAttribute('x');
+      var ty = temp_canvas.getAttribute('y');
+      var tdx = temp_canvas.getAttribute('dx');
+      var tdy = temp_canvas.getAttribute('dy');
+
+      photomosaic(img, tx * ratio, ty * ratio, tdx * ratio, tdy * ratio);
+    };
+    img.src = prev_image;
+  };
+
+
+  function photomosaic(image, posx = -1, posy = -1, posdx = -1, posdy = -1) {
+    // Dimensions of each tile
+    var tileWidth = TILE_WIDTH;
+    var tileHeight = TILE_HEIGHT;
+
+    //creating the canvas for photomosaic
+    // var canvas = document.createElement('canvas');
+    var canvas = document.querySelector('#previewCanvas');
+    var context = canvas.getContext("2d");
+    // console.log(image.height, image.width);
+
+    var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    var pixels = imageData.data;
+
+    // Number of mosaic tiles
+    var numTileCols = canvas.width / tileWidth;
+    var numTileRows = canvas.height / tileHeight;
+
+    //function for finding the average color
+    function averageColor(row, column) {
+      var blockSize = 1, // we can set how many pixels to skip
+
+        data, width, height,
+        i = -4,
+        length,
+        rgb = {
+          r: 0,
+          g: 0,
+          b: 0
+        },
+        count = 0;
+
+      try {
+        // data = imageCanvasContext.getImageData(column * TILE_WIDTH, row * TILE_HEIGHT, TILE_HEIGHT, TILE_WIDTH);
+        data = context.getImageData(column * TILE_WIDTH, row * TILE_HEIGHT, TILE_HEIGHT, TILE_WIDTH);
+      } catch (e) {
+        alert('Not happening this time!');
+        return rgb;
+      }
+
+      length = data.data.length;
+
+      while ((i += blockSize * 4) < length) {
+        ++count;
+        rgb.r += data.data[i];
+        rgb.g += data.data[i + 1];
+        rgb.b += data.data[i + 2];
+      }
+
+      // ~~ used to floor values
+      rgb.r = ~~(rgb.r / count);
+      rgb.g = ~~(rgb.g / count);
+      rgb.b = ~~(rgb.b / count);
+
+      return rgb;
+
+    }
+
+    // Loop through each tile
+    for (var r = 0; r < numTileRows; r++) {
+      for (var c = 0; c < numTileCols; c++) {
+        // Set the pixel values for each tile
+        var rgb = averageColor(r, c)
+        var red = rgb.r;
+        var green = rgb.g;
+        var blue = rgb.b;
+
+        // Loop through each tile pixel
+        for (var tr = 0; tr < tileHeight; tr++) {
+          for (var tc = 0; tc < tileWidth; tc++) {
+
+            // Calculate the true position of the tile pixel
+            var trueRow = (r * tileHeight) + tr;
+            var trueCol = (c * tileWidth) + tc;
+
+            // Calculate the position of the current pixel in the array
+            var pos = (trueRow * (imageData.width * 4)) + (trueCol * 4);
+
+            // Assign the colour to each pixel
+            pixels[pos + 0] = red;
+            pixels[pos + 1] = green;
+            pixels[pos + 2] = blue;
+            pixels[pos + 3] = 255;
+          };
+        };
+      };
+    };
+
+    // Draw image data to the canvas
+    context.putImageData(imageData, 0, 0);
+    if (posx != -1) {
+      let __ctx = document.querySelector('#jsCanvas').getContext('2d');
+      __ctx.drawImage(context.canvas, 0, 0, context.canvas.width, context.canvas.height, posx, posy, (posdx), (posdy));
+    }
+
+    return canvas;
+
+
+
+
+
+  }
+
+</script>
+
+
+
+</script>
+
+</html>

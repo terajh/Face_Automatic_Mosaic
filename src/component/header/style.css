@@ -1,0 +1,25 @@
+#nav {
+    background-color: #3288c4;
+    height:100%;
+}
+
+header {
+    height: 4.8%;
+}
+
+#nav_content > a, #nav_content > div {
+    float:left;
+}
+
+.navbar-brand svg {
+    float:left;
+    margin-top:6px;
+}
+
+.mr-auto {
+    margin-left:10px;
+}
+
+#home_link {
+    margin-top: 3px;
+}
