@@ -6,14 +6,15 @@
   <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#000000" />
-  <meta name="description" content="Web site created using create-react-app" />
   <link rel="stylesheet" href="./style/dropzone.css" />
   <link rel="stylesheet" href="./style/slider.css" />
 
-  <script type="text/javascript" src="http://code.jquery.com/jquery-2.1.4.js"></script>
+  <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.4.js"></script>
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
   <script type="text/javascript" src="./javascript/dropzone.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.0.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface"></script>
 
   <title>Humozaic</title>
 </head>
@@ -21,7 +22,7 @@
 <body>
   <noscript>You need to enable JavaScript to run this app.</noscript>
   <div id="root"></div>
-  
+
 </body>
 <script>
   var TILE_HEIGHT = 10;
@@ -34,14 +35,11 @@
 
 
   $(window).load(() => {
-
-
     const canvas = document.querySelector('#jsCanvas');
     const ctx = canvas.getContext('2d');
     const browseBtn = document.querySelector('.browse-btn');
     const realInput = document.querySelector('#real-input');
     var main_image;
-
     var t = document.querySelector('#down_images');
 
     t.addEventListener('click', () => {
@@ -57,160 +55,124 @@
       aTag.click();
     })
 
-    function readInputFile(e) {
+    async function readInputFile(e) {
       var file = e.target.files;
       var reader = new FileReader();
       reader.onload = function (e) {
         var img = new Image();
-        img.onload = function () {
+        img.onload = async function () {
           main_image = img;
-          ratio = 730 / img.height;
-          console.log(img.height, ratio);
-          canvas.width = img.width * (ratio);
-          canvas.height = img.height * (ratio);
+          console.log(img.width, img.height);
+          ratio = 1050 / img.width;
+          canvas.width = img.width * ratio;
+          canvas.height = img.height * ratio;
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
           var formData = new FormData();
-
-          formData.append('uploadFile', file[0]);
-          formData.append('name', 'test');
-          // This is your API token
           $('body').toggleClass('loading')
-          $.ajax({
+          const model = await blazeface.load();
 
+          // Pass in an image or video to the model. The model returns an array of
+          // bounding boxes, probabilities, and landmarks, one for each detected face.
 
-            url: '/api',
-            data: formData,
-            processData: false,
-            contentType: false,
-            type: 'POST',
-            headers: {
-              'Access-Control-Allow-Credentials': true,
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Methods': 'GET',
-              'Access-Control-Allow-Headers': 'application/json',
-            },
-            success: function (data) {
-              console.log(data);
-              $('body').toggleClass('loading')
-              var pos_x = [];
-              var pos_y = [];
-              for(var i = 0; i<data['len'] ; i++){
-                pos_x.push(data['list'][i]['left']);
-                pos_x.push(data['list'][i]['right']);
-                pos_y.push(data['list'][i]['top']);
-                pos_y.push(data['list'][i]['bottom']);
-              }
-              console.log(pos_x, pos_y);
-              _pos_x = pos_x;
-              _pos_y = pos_y;
+          const returnTensors = false; // Pass in `true` to get tensors back, rather than values.
+          const predictions = await model.estimateFaces(img, returnTensors);
+          var pos_x = [];
+          var pos_y = [];
+          if (predictions.length > 0) {
+            console.log(predictions);
+            
+            for (let i = 0; i < predictions.length; i++) {
 
-              var container = $('#select_mozaic_human');
-              for (var i = 0; i < pos_x.length; i += 2) {
-                var face_div = document.createElement('div');
-                face_div.className = "face_div";
+              pos_x.push(predictions[i].topLeft[0]);
+              pos_y.push(predictions[i].topLeft[1]);
 
-                var check_face = document.createElement('input');
-                check_face.className = "check_face display_none";
-                check_face.id = "radio" + i.toString();
-                check_face.type = "radio";
+              pos_x.push(predictions[i].bottomRight[0]);
+              pos_y.push(predictions[i].bottomRight[1]);
 
-
-
-                var face_canvas = document.createElement('canvas');
-                face_canvas.className = "face_canvas";
-                face_canvas.id = "canvas" + i.toString();
-                face_canvas.setAttribute('x', pos_x[i]);
-                face_canvas.setAttribute('y', pos_y[i]);
-                face_canvas.setAttribute('dx', pos_x[i + 1] - pos_x[i]);
-                face_canvas.setAttribute('dy', pos_y[i + 1] - pos_y[i]);
-
-                var _ctx = face_canvas.getContext('2d');
-                _ctx.drawImage(img, pos_x[i], pos_y[i], pos_x[i + 1] - pos_x[i], pos_y[i + 1] - pos_y[i], 0, 0, face_canvas.width, face_canvas.height);
-
-                face_div.append(check_face);
-                face_div.append(face_canvas);
-
-                container.append(face_div);
-
-                face_canvas.addEventListener('click', (e) => {
-                  var img = new Image(); // 이미지 객체를 생성하고
-                  console.log('click');
-                  if ($('#radio' + e.target.id.split('canvas')[1]).attr('check') === 'true') {
-                    $('#' + e.target.id).toggleClass('face_canvas_select');
-                    $('#radio' + e.target.id.split('canvas')[1]).prop('checked', false);
-                    $('#radio' + e.target.id.split('canvas')[1]).attr('check', false);
-                    let _cv = document.querySelector('#' + e.target.id);
-                    let _ct = _cv.getContext('2d');
-                    var tx = _cv.getAttribute('x') * ratio;
-                    var ty = _cv.getAttribute('y') * ratio;
-                    var tdx = _cv.getAttribute('dx') * ratio;
-                    var tdy = _cv.getAttribute('dy') * ratio;
-                    ctx.drawImage(_ct.canvas, 0, 0, _ct.canvas.width, _ct.canvas.height, tx, ty, tdx, tdy);
-                    return;
-                  }
-                  $('#' + e.target.id).toggleClass('face_canvas_select');
-                  $('#radio' + e.target.id.split('canvas')[1]).prop('checked', true);
-                  $('#radio' + e.target.id.split('canvas')[1]).attr('check', true);
-
-                  var prev_image = document.querySelector('#' + e.target.id).toDataURL("image/ipeg");
-                  current_image_id = e.target.id;
-
-                  var _ctx = document.querySelector('#' + e.target.id).getContext('2d');
-                  var prev_canvas = document.querySelector('#previewCanvas');
-                  var prev_ctx = prev_canvas.getContext('2d');
-
-                  prev_ctx.drawImage(_ctx.canvas, 0, 0, prev_canvas.width, prev_canvas.height); // 복사할 캔버스의 컨텍스트를 가져와 drawImage를 호출해 다시 그려준다.
-                  img.onload = function (e) { // 이미지가 로드된 후에
-                    var temp_canvas = document.querySelector('#' + current_image_id);
-                    // console.log(temp_canvas, '#'+current_image_id)
-                    var tx = temp_canvas.getAttribute('x');
-                    var ty = temp_canvas.getAttribute('y');
-                    var tdx = temp_canvas.getAttribute('dx');
-                    var tdy = temp_canvas.getAttribute('dy');
-
-                    photomosaic(e.path[0], tx*ratio, ty*ratio, tdx*ratio, tdy*ratio);
-                  };
-                  img.src = prev_image;
-                })
-              }
-
-              // $('.check_face').click((e) => {
-              //   if ($('#' + e.target.id).attr('check') === "true") {
-              //     console.log('click');
-              //     $('#' + e.target.id).prop('checked', false);
-              //     $('#' + e.target.id).attr('check', false);
-              //     $('#canvas' + e.target.id.split('radio')[1]).toggleClass('face_canvas_select');
-
-              //     let _cv = document.querySelector('#canvas' + e.target.id.split('radio')[1]);
-              //     let _ct = _cv.getContext('2d');
-              //     var tx = _cv.getAttribute('x');
-              //     var ty = _cv.getAttribute('y');
-              //     var tdx = _cv.getAttribute('dx');
-              //     var tdy = _cv.getAttribute('dy');
-              //     console.log('draw face');
-              //     ctx.drawImage(_ct.canvas, 0, 0, _ct.canvas.width, _ct.canvas.height, tx*ratio, ty*ratio, tdx*ratio, tdy*ratio);
-              //   }
-              //   else {
-              //     $('#' + e.target.id).prop('checked', true);
-              //     $('#' + e.target.id).attr('check', true);
-              //     $('#canvas' + e.target.id.split('radio')[1]).toggleClass('face_canvas_select');
-              //   }
-              // });
             }
-          });
-        };
+          }
+          $('body').toggleClass('loading')
+          
+          console.log(pos_x, pos_y);
+          _pos_x = pos_x;
+          _pos_y = pos_y;
+
+          var container = $('#select_mozaic_human');
+          for (var i = 0; i < pos_x.length; i += 2) {
+            var face_div = document.createElement('div');
+            face_div.className = "face_div";
+
+            var check_face = document.createElement('input');
+            check_face.className = "check_face display_none";
+            check_face.id = "radio" + i.toString();
+            check_face.type = "radio";
+
+            var face_canvas = document.createElement('canvas');
+            face_canvas.className = "face_canvas";
+            face_canvas.id = "canvas" + i.toString();
+            face_canvas.setAttribute('x', pos_x[i]);
+            face_canvas.setAttribute('y', pos_y[i]);
+            face_canvas.setAttribute('dx', pos_x[i + 1] - pos_x[i]);
+            face_canvas.setAttribute('dy', pos_y[i + 1] - pos_y[i]);
+
+            var _ctx = face_canvas.getContext('2d');
+            _ctx.drawImage(img, pos_x[i], pos_y[i], pos_x[i + 1] - pos_x[i], pos_y[i + 1] - pos_y[i], 0, 0, face_canvas.width, face_canvas.height);
+
+            face_div.append(check_face);
+            face_div.append(face_canvas);
+
+            container.append(face_div);
+
+            face_canvas.addEventListener('click', (e) => {
+              var img = new Image(); // 이미지 객체를 생성하고
+              console.log('click');
+              if ($('#radio' + e.target.id.split('canvas')[1]).attr('check') === 'true') {
+                $('#' + e.target.id).toggleClass('face_canvas_select');
+                $('#radio' + e.target.id.split('canvas')[1]).prop('checked', false);
+                $('#radio' + e.target.id.split('canvas')[1]).attr('check', false);
+                let _cv = document.querySelector('#' + e.target.id);
+                let _ct = _cv.getContext('2d');
+                var tx = _cv.getAttribute('x') * ratio;
+                var ty = _cv.getAttribute('y') * ratio;
+                var tdx = _cv.getAttribute('dx') * ratio;
+                var tdy = _cv.getAttribute('dy') * ratio;
+                ctx.drawImage(_ct.canvas, 0, 0, _ct.canvas.width, _ct.canvas.height, tx, ty, tdx, tdy);
+                return;
+              }
+              $('#' + e.target.id).toggleClass('face_canvas_select');
+              $('#radio' + e.target.id.split('canvas')[1]).prop('checked', true);
+              $('#radio' + e.target.id.split('canvas')[1]).attr('check', true);
+
+              var prev_image = document.querySelector('#' + e.target.id).toDataURL("image/ipeg");
+              current_image_id = e.target.id;
+
+              var _ctx = document.querySelector('#' + e.target.id).getContext('2d');
+              var prev_canvas = document.querySelector('#previewCanvas');
+              var prev_ctx = prev_canvas.getContext('2d');
+
+              prev_ctx.drawImage(_ctx.canvas, 0, 0, prev_canvas.width, prev_canvas.height); // 복사할 캔버스의 컨텍스트를 가져와 drawImage를 호출해 다시 그려준다.
+              img.onload = function (e) { // 이미지가 로드된 후에
+                var temp_canvas = document.querySelector('#' + current_image_id);
+                // console.log(temp_canvas, '#'+current_image_id)
+                var tx = temp_canvas.getAttribute('x');
+                var ty = temp_canvas.getAttribute('y');
+                var tdx = temp_canvas.getAttribute('dx');
+                var tdy = temp_canvas.getAttribute('dy');
+
+                photomosaic(e.path[0], tx * ratio, ty * ratio, tdx * ratio, tdy * ratio);
+              };
+              img.src = prev_image;
+            })
+          }
+        }
         img.src = e.target.result;
       };
       reader.readAsDataURL(file[0]);
-    }
+    };
     realInput.addEventListener('change', readInputFile);
-
-
-
-  });
-
-
+  })
+  
 
   var slider = document.getElementById("myRange");
   var output = document.getElementById("demo");
@@ -240,7 +202,7 @@
       var tdx = temp_canvas.getAttribute('dx');
       var tdy = temp_canvas.getAttribute('dy');
 
-      photomosaic(img, tx*ratio, ty*ratio, tdx*ratio, tdy*ratio);
+      photomosaic(img, tx * ratio, ty * ratio, tdx * ratio, tdy * ratio);
     };
     img.src = prev_image;
   };
